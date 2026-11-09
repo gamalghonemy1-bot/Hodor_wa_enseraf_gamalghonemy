@@ -1,0 +1,35 @@
+name: Cancel all runs
+
+# تشغيل يدوي فقط: يلغي كل التشغيلات الجارية/المنتظرة ويحذف التشغيلات الفاشلة القديمة
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      SELF: ${{ github.run_id }}
+    steps:
+      - name: Cancel queued and in-progress runs
+        run: |
+          for st in queued in_progress waiting pending requested; do
+            for id in $(gh run list --repo "$REPO" --status "$st" --limit 100 --json databaseId -q '.[].databaseId'); do
+              [ "$id" = "$SELF" ] && continue
+              echo "cancel $id ($st)"
+              gh run cancel "$id" --repo "$REPO" || true
+            done
+          done
+      - name: Delete old finished runs
+        run: |
+          sleep 20
+          for id in $(gh run list --repo "$REPO" --status completed --limit 100 --json databaseId -q '.[].databaseId'); do
+            [ "$id" = "$SELF" ] && continue
+            echo "delete $id"
+            gh run delete "$id" --repo "$REPO" || true
+          done
